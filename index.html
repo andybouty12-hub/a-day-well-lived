@@ -62,7 +62,12 @@ const client=window.supabase?.createClient(URL,PUBLISHABLE_KEY,{auth:{persistSes
 const status=document.getElementById('cloudStatus'),guest=document.getElementById('cloudGuest'),signed=document.getElementById('cloudSigned');
 let user=null,enabled=false,revision=null,dirty=false,timer=null,busy=false,checking=false,channel=null;
 const baselineKey=()=> 'dayWellLived.syncBaseline.'+user?.id;
-const fingerprint=v=>JSON.stringify(v);
+const canonical=v=>{
+  if(Array.isArray(v))return v.map(canonical);
+  if(v&&typeof v==='object')return Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])]));
+  return v;
+};
+const fingerprint=v=>JSON.stringify(canonical(v));
 function normalized(v){
   const x=JSON.parse(JSON.stringify(v));
   x.workoutPlan=Array.isArray(x.workoutPlan)&&x.workoutPlan.length===7?x.workoutPlan:starterWorkoutPlan();
@@ -82,7 +87,7 @@ const remember=(data,rev)=>{try{localStorage.setItem(baselineKey(),JSON.stringif
 function setStatus(t){status.textContent=t}
 function ui(){guest.hidden=!!user;signed.hidden=!user;document.getElementById('cloudAccount').textContent=user?'Signed in: '+user.email:'';}
 function snapshot(){return JSON.parse(JSON.stringify(db))}
-function localIsClean(){const b=baseline();return !!b && (Number(localStorage.getItem('dayWellLived.editCounter')||0)===b.editCounter || same(snapshot(),JSON.parse(b.data)))}
+function localIsClean(){const b=baseline();return !!b && same(snapshot(),JSON.parse(b.data))}
 function watchCloud(){if(channel){client.removeChannel(channel);channel=null}if(!user)return;channel=client.channel('planner-updates-'+user.id).on('postgres_changes',{event:'*',schema:'public',table:'planner_data',filter:'user_id=eq.'+user.id},()=>{if(!document.hidden)window.cloudCheck()}).subscribe()}
 function valid(v){return v&&Array.isArray(v.habits)&&Array.isArray(v.events)&&Array.isArray(v.tasks)&&Array.isArray(v.subjects)&&Array.isArray(v.lists)}
 async function remote(){const {data,error}=await client.from('planner_data').select('data,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
@@ -117,7 +122,7 @@ window.cloudLogout=async()=>{if(!client)return;enabled=false;await client.auth.s
 window.cloudUpload=async()=>{if(!user||busy)return;const r=await remote().catch(e=>{setStatus(e.message);return undefined});if(r===undefined)return;if(r&&!confirm('Replace the cloud planner with THIS device’s data? This can overwrite changes from other devices. Export a backup first.'))return;if(!r&&!confirm('Upload this device’s planner to your new cloud account? Export a backup first.'))return;revision=r?.updated_at||null;enabled=true;dirty=true;await save(true)};
 window.cloudDownload=async()=>{if(!user||busy)return;try{const r=await remote();if(!r)return setStatus('No cloud planner yet. Upload from your primary device first.');if(!valid(r.data))return setStatus('Cloud planner is invalid; not loading.');if(!confirm('Replace ALL local planner data on this device with the cloud version? Export a backup first.'))return;useRemote(r)}catch(e){setStatus(e.message)}};
 window.cloudCheck=async()=>{
-  if(!user||busy||checking||dirty)return;
+  if(!user||busy||checking||(dirty&&enabled))return;
   checking=true;
   try{
     const r=await remote();if(!r)return setStatus('No cloud planner yet.');
@@ -132,7 +137,12 @@ window.cloudCheck=async()=>{
     enabled=false;dirty=false;setStatus('Sync conflict · both devices changed data. Back up before choosing Load or Upload.');
   }catch(e){setStatus('Cloud check failed: '+e.message)}finally{checking=false}
 };
-async function save(force=false){if(!user||!enabled||busy||(!dirty&&!force))return;busy=true;try{const r=await remote();if(!force&&r?.updated_at!==revision){enabled=false;setStatus('Cloud changed during saving · checking for conflicts…');setTimeout(()=>window.cloudCheck(),0);return}const local=snapshot();const updated=new Date().toISOString();let q=client.from('planner_data');let result;if(r){result=await q.update({data:local,updated_at:updated}).eq('user_id',user.id).eq('updated_at',r.updated_at).select('updated_at').maybeSingle();if(!result.error&&!result.data){enabled=false;setStatus('Sync conflict. Check cloud before continuing.');return}}else{result=await q.insert({user_id:user.id,data:local,updated_at:updated}).select('updated_at').single()}if(result.error)throw result.error;revision=result.data.updated_at;remember(local,revision);dirty=JSON.stringify(db)!==JSON.stringify(local);setStatus(dirty?'Saving newer edits…':'Synced ✓')}catch(e){setStatus('Not synced: '+e.message+' · local copy retained')}finally{busy=false;if(dirty&&enabled){clearTimeout(timer);timer=setTimeout(()=>save(),1800)}}}
+async function save(force=false){if(!user||!enabled||busy||(!dirty&&!force))return;busy=true;try{const r=await remote();if(!force&&r?.updated_at!==revision){
+  if(r&&same(r.data,snapshot())){useRemote(r);return}
+  const b=baseline();
+  if(b&&r&&same(r.data,JSON.parse(b.data))){revision=r.updated_at}
+  else {enabled=false;dirty=false;setStatus('Cloud changed during saving · checking for conflicts…');setTimeout(()=>window.cloudCheck(),100);return}
+}const local=snapshot();const updated=new Date().toISOString();let q=client.from('planner_data');let result;if(r){result=await q.update({data:local,updated_at:updated}).eq('user_id',user.id).eq('updated_at',r.updated_at).select('updated_at').maybeSingle();if(!result.error&&!result.data){enabled=false;setStatus('Sync conflict. Check cloud before continuing.');return}}else{result=await q.insert({user_id:user.id,data:local,updated_at:updated}).select('updated_at').single()}if(result.error)throw result.error;revision=result.data.updated_at;remember(local,revision);dirty=!same(db,local);setStatus(dirty?'Saving newer edits…':'Synced ✓')}catch(e){setStatus('Not synced: '+e.message+' · local copy retained')}finally{busy=false;if(dirty&&enabled){clearTimeout(timer);timer=setTimeout(()=>save(),1800)}}}
 window.cloudQueueSave=()=>{if(!enabled||!user)return;dirty=true;setStatus('Saving…');clearTimeout(timer);timer=setTimeout(()=>save(),1200)};
   
 ui();
