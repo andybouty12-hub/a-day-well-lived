@@ -60,22 +60,51 @@ const URL='https://oxuhizfccpnhjisbkesw.supabase.co';
 const PUBLISHABLE_KEY='sb_publishable_LAlX6i1QDioZOdZwnVAp0w_SNob702I';
 const client=window.supabase?.createClient(URL,PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const status=document.getElementById('cloudStatus'),guest=document.getElementById('cloudGuest'),signed=document.getElementById('cloudSigned');
-let user=null,enabled=false,revision=null,dirty=false,timer=null,busy=false;
+let user=null,enabled=false,revision=null,dirty=false,timer=null,busy=false,checking=false;
+const baselineKey=()=> 'dayWellLived.syncBaseline.'+user?.id;
+const fingerprint=v=>JSON.stringify(v);
+const baseline=()=>{try{return JSON.parse(localStorage.getItem(baselineKey())||'null')}catch{return null}};
+const remember=(data,rev)=>{try{localStorage.setItem(baselineKey(),JSON.stringify({data:fingerprint(data),revision:rev}))}catch{}};
 function setStatus(t){status.textContent=t}
 function ui(){guest.hidden=!!user;signed.hidden=!user;document.getElementById('cloudAccount').textContent=user?'Signed in: '+user.email:'';}
 function snapshot(){return JSON.parse(JSON.stringify(db))}
 function valid(v){return v&&Array.isArray(v.habits)&&Array.isArray(v.events)&&Array.isArray(v.tasks)&&Array.isArray(v.subjects)&&Array.isArray(v.lists)}
 async function remote(){const {data,error}=await client.from('planner_data').select('data,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
-function useRemote(r){if(!valid(r.data))throw Error('Cloud data is not a valid planner backup.');db={...initial(),...r.data};db.workoutPlan=Array.isArray(db.workoutPlan)&&db.workoutPlan.length===7?db.workoutPlan:starterWorkoutPlan();db.workoutLogs=Array.isArray(db.workoutLogs)?db.workoutLogs:[];db.weeklyMeals=db.weeklyMeals||{};db.journal=db.journal||{};db.saintNotes=db.saintNotes||[];db.prepChecks=db.prepChecks||{};db.money=db.money||{plan:{income:0,fixed:0,limit:0,goal:0},expenses:[]};localStorage.setItem(KEY,JSON.stringify(db));revision=r.updated_at;enabled=true;dirty=false;render();renderMoney();setStatus('Synced ✓')}
-async function chooseSession(u){user=u;enabled=false;dirty=false;revision=null;ui();if(!u){setStatus('Local only · sign in to sync');return}try{const r=await remote();if(r){setStatus('Cloud data found · choose upload or load');document.getElementById('cloudAdvice').textContent='Cloud data exists. Export a local backup first. Upload replaces cloud data; Load replaces this device’s data.'}else{setStatus('Cloud is empty · upload to begin');document.getElementById('cloudAdvice').textContent='Cloud is empty. Export a local backup, then choose Upload to migrate this device’s data.'}}catch(e){setStatus('Cloud unavailable: '+e.message)}}
+function useRemote(r){if(!valid(r.data))throw Error('Cloud data is not a valid planner backup.');db={...initial(),...r.data};db.workoutPlan=Array.isArray(db.workoutPlan)&&db.workoutPlan.length===7?db.workoutPlan:starterWorkoutPlan();db.workoutLogs=Array.isArray(db.workoutLogs)?db.workoutLogs:[];db.weeklyMeals=db.weeklyMeals||{};db.journal=db.journal||{};db.saintNotes=db.saintNotes||[];db.prepChecks=db.prepChecks||{};db.money=db.money||{plan:{income:0,fixed:0,limit:0,goal:0},expenses:[]};localStorage.setItem(KEY,JSON.stringify(db));revision=r.updated_at;enabled=true;dirty=false;remember(r.data,revision);render();renderMoney();setStatus('Synced ✓')}
+async function chooseSession(u){
+  user=u;enabled=false;dirty=false;revision=null;ui();
+  if(!u){setStatus('Local only · sign in to sync');return}
+  try{
+    const r=await remote(), local=snapshot(), base=baseline();
+    if(!r){setStatus('Cloud is empty · upload to begin');document.getElementById('cloudAdvice').textContent='Export a backup, then upload this device once to start automatic sync.';return}
+    if(!valid(r.data))throw Error('Cloud data is not a valid planner backup');
+    const cloud=fingerprint(r.data), current=fingerprint(local);
+    if(current===cloud){revision=r.updated_at;enabled=true;remember(r.data,revision);setStatus('Automatic sync active ✓');return}
+    if(base && current===base.data){useRemote(r);setStatus('Updated from cloud · automatic sync active ✓');return}
+    if(base && cloud===base.data){revision=r.updated_at;enabled=true;dirty=true;setStatus('Saving local changes…');await save();return}
+    setStatus('Different local and cloud data · choose Load or Upload after backup');
+    document.getElementById('cloudAdvice').textContent='Both copies contain different data. Export a backup, then choose which copy to keep. Automatic sync will start afterward.';
+  }catch(e){setStatus('Cloud unavailable: '+e.message)}
+}
 window.cloudLogin=async()=>{if(!client)return;const email=document.getElementById('cloudEmail').value.trim(),password=document.getElementById('cloudPassword').value;setStatus('Signing in…');const {error}=await client.auth.signInWithPassword({email,password});if(error)setStatus(error.message)};
 window.cloudSignup=async()=>{if(!client)return;const email=document.getElementById('cloudEmail').value.trim(),password=document.getElementById('cloudPassword').value;if(password.length<6)return setStatus('Use a password with at least 6 characters.');setStatus('Creating account…');const {error,data}=await client.auth.signUp({email,password,emailRedirectTo:location.origin+location.pathname});setStatus(error?error.message:(data.session?'Account created · signed in':'Check your email to confirm your account, then sign in.'))};
 window.cloudResetPassword=async()=>{if(!client)return;const email=document.getElementById('cloudEmail').value.trim();if(!email)return setStatus('Enter your email first.');const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});setStatus(error?error.message:'Check your email for password reset instructions.');};
 window.cloudLogout=async()=>{if(!client)return;enabled=false;await client.auth.signOut();setStatus('Signed out · local data remains on this device')};
 window.cloudUpload=async()=>{if(!user||busy)return;const r=await remote().catch(e=>{setStatus(e.message);return undefined});if(r===undefined)return;if(r&&!confirm('Replace the cloud planner with THIS device’s data? This can overwrite changes from other devices. Export a backup first.'))return;if(!r&&!confirm('Upload this device’s planner to your new cloud account? Export a backup first.'))return;revision=r?.updated_at||null;enabled=true;dirty=true;await save(true)};
 window.cloudDownload=async()=>{if(!user||busy)return;try{const r=await remote();if(!r)return setStatus('No cloud planner yet. Upload from your primary device first.');if(!valid(r.data))return setStatus('Cloud planner is invalid; not loading.');if(!confirm('Replace ALL local planner data on this device with the cloud version? Export a backup first.'))return;useRemote(r)}catch(e){setStatus(e.message)}};
-window.cloudCheck=async()=>{if(!user)return;try{const r=await remote();if(!r)return setStatus('No cloud planner yet.');if(!enabled)return setStatus('Cloud available. Choose Load or Upload first.');if(r.updated_at!==revision){enabled=false;setStatus('Newer cloud changes found. Export a backup, then choose Load or Upload.')}else setStatus('Up to date ✓')}catch(e){setStatus(e.message)}};
-async function save(force=false){if(!user||!enabled||busy||(!dirty&&!force))return;busy=true;try{const r=await remote();if(!force&&r?.updated_at!==revision){enabled=false;setStatus('Sync paused: another device changed cloud data. Export a backup and choose Load or Upload.');return}const local=snapshot();const updated=new Date().toISOString();let q=client.from('planner_data');let result;if(r){result=await q.update({data:local,updated_at:updated}).eq('user_id',user.id).eq('updated_at',r.updated_at).select('updated_at').maybeSingle();if(!result.error&&!result.data){enabled=false;setStatus('Sync conflict. Check cloud before continuing.');return}}else{result=await q.insert({user_id:user.id,data:local,updated_at:updated}).select('updated_at').single()}if(result.error)throw result.error;revision=result.data.updated_at;dirty=JSON.stringify(db)!==JSON.stringify(local);setStatus(dirty?'Saving newer edits…':'Synced ✓')}catch(e){setStatus('Not synced: '+e.message+' · local copy retained')}finally{busy=false;if(dirty&&enabled){clearTimeout(timer);timer=setTimeout(()=>save(),1800)}}}
+window.cloudCheck=async()=>{
+  if(!user||busy||checking)return;
+  checking=true;
+  try{
+    const r=await remote();if(!r)return setStatus('No cloud planner yet.');
+    if(!enabled)return setStatus('Cloud available. Choose Load or Upload first.');
+    if(r.updated_at===revision){if(!dirty)setStatus('Up to date ✓');return}
+    const base=baseline(), current=fingerprint(snapshot());
+    if(!dirty && base && current===base.data){useRemote(r);setStatus('Updated from cloud ✓');return}
+    enabled=false;setStatus('Sync conflict · local changes retained. Export backup before resolving.');
+  }catch(e){setStatus('Cloud check failed: '+e.message)}finally{checking=false}
+};
+async function save(force=false){if(!user||!enabled||busy||(!dirty&&!force))return;busy=true;try{const r=await remote();if(!force&&r?.updated_at!==revision){enabled=false;setStatus('Sync paused: another device changed cloud data. Export a backup and choose Load or Upload.');return}const local=snapshot();const updated=new Date().toISOString();let q=client.from('planner_data');let result;if(r){result=await q.update({data:local,updated_at:updated}).eq('user_id',user.id).eq('updated_at',r.updated_at).select('updated_at').maybeSingle();if(!result.error&&!result.data){enabled=false;setStatus('Sync conflict. Check cloud before continuing.');return}}else{result=await q.insert({user_id:user.id,data:local,updated_at:updated}).select('updated_at').single()}if(result.error)throw result.error;revision=result.data.updated_at;remember(local,revision);dirty=JSON.stringify(db)!==JSON.stringify(local);setStatus(dirty?'Saving newer edits…':'Synced ✓')}catch(e){setStatus('Not synced: '+e.message+' · local copy retained')}finally{busy=false;if(dirty&&enabled){clearTimeout(timer);timer=setTimeout(()=>save(),1800)}}}
 window.cloudQueueSave=()=>{if(!enabled||!user)return;dirty=true;setStatus('Saving…');clearTimeout(timer);timer=setTimeout(()=>save(),1200)};
   
 ui();
@@ -94,7 +123,9 @@ client.auth.getSession().then(({data,error})=>{
   if(error){setStatus('Session check failed: '+error.message);return}
   if(user?.id!==data.session?.user?.id)chooseSession(data.session?.user||null);
 }).catch(e=>setStatus('Session check failed: '+e.message));
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&enabled&&!dirty)cloudCheck()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&enabled)cloudCheck()});
+window.addEventListener('focus',()=>{if(enabled)cloudCheck()});
+setInterval(()=>{if(enabled&&user&&!document.hidden&&!dirty)cloudCheck()},20000);
 })();
 </script>
 </body></html>
