@@ -117,17 +117,17 @@ window.cloudLogout=async()=>{if(!client)return;enabled=false;await client.auth.s
 window.cloudUpload=async()=>{if(!user||busy)return;const r=await remote().catch(e=>{setStatus(e.message);return undefined});if(r===undefined)return;if(r&&!confirm('Replace the cloud planner with THIS device’s data? This can overwrite changes from other devices. Export a backup first.'))return;if(!r&&!confirm('Upload this device’s planner to your new cloud account? Export a backup first.'))return;revision=r?.updated_at||null;enabled=true;dirty=true;await save(true)};
 window.cloudDownload=async()=>{if(!user||busy)return;try{const r=await remote();if(!r)return setStatus('No cloud planner yet. Upload from your primary device first.');if(!valid(r.data))return setStatus('Cloud planner is invalid; not loading.');if(!confirm('Replace ALL local planner data on this device with the cloud version? Export a backup first.'))return;useRemote(r)}catch(e){setStatus(e.message)}};
 window.cloudCheck=async()=>{
-  if(!user||busy||checking)return;
+  if(!user||busy||checking||dirty)return;
   checking=true;
   try{
     const r=await remote();if(!r)return setStatus('No cloud planner yet.');
     if(!valid(r.data))throw Error('Cloud planner is invalid');
     const local=fingerprint(normalized(snapshot())), cloud=fingerprint(normalized(r.data)), base=baseline();
-    if(local===cloud){revision=r.updated_at;enabled=true;dirty=false;remember(snapshot(),revision);setStatus('Up to date ✓');return}
+    if(local===cloud){revision=r.updated_at;enabled=true;dirty=false;clearTimeout(timer);remember(snapshot(),revision);setStatus('Up to date ✓');return}
     // A device with no unsynced edits can always accept a newer cloud revision.
     if(base && localIsClean()){useRemote(r);setStatus('Automatically updated from cloud ✓');return}
     // Local-only edits and an unchanged cloud revision: safely push the local edits.
-    if(base && cloud===fingerprint(normalized(JSON.parse(base.data)))){revision=r.updated_at;enabled=true;dirty=true;setStatus('Saving local edits…');setTimeout(()=>save(),0);return}
+    if(base && cloud===fingerprint(normalized(JSON.parse(base.data)))){revision=r.updated_at;enabled=true;dirty=true;setStatus('Saving local edits…');clearTimeout(timer);timer=setTimeout(()=>save(),1200);return}
     // Neither side matches the last shared copy: do not discard either edit.
     enabled=false;dirty=false;setStatus('Sync conflict · both devices changed data. Back up before choosing Load or Upload.');
   }catch(e){setStatus('Cloud check failed: '+e.message)}finally{checking=false}
