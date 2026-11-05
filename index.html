@@ -63,6 +63,20 @@ const status=document.getElementById('cloudStatus'),guest=document.getElementByI
 let user=null,enabled=false,revision=null,dirty=false,timer=null,busy=false,checking=false,channel=null;
 const baselineKey=()=> 'dayWellLived.syncBaseline.'+user?.id;
 const fingerprint=v=>JSON.stringify(v);
+function normalized(v){
+  const x=JSON.parse(JSON.stringify(v));
+  x.workoutPlan=Array.isArray(x.workoutPlan)&&x.workoutPlan.length===7?x.workoutPlan:starterWorkoutPlan();
+  x.workoutLogs=Array.isArray(x.workoutLogs)?x.workoutLogs:[];
+  x.weeklyMeals=x.weeklyMeals||{};
+  x.journal=x.journal||{};
+  x.saintNotes=Array.isArray(x.saintNotes)?x.saintNotes:[];
+  x.prepChecks=x.prepChecks||{};
+  x.money=x.money||{plan:{income:0,fixed:0,limit:0,goal:0},expenses:[]};
+  if(!x.money.plan)x.money.plan={income:0,fixed:0,limit:0,goal:0};
+  if(!Array.isArray(x.money.expenses))x.money.expenses=[];
+  return x;
+}
+const same=(a,b)=>fingerprint(normalized(a))===fingerprint(normalized(b));
 const baseline=()=>{try{return JSON.parse(localStorage.getItem(baselineKey())||'null')}catch{return null}};
 const remember=(data,rev)=>{try{localStorage.setItem(baselineKey(),JSON.stringify({data:fingerprint(data),revision:rev}))}catch{}};
 function setStatus(t){status.textContent=t}
@@ -72,7 +86,15 @@ function localIsClean(){const b=baseline();return !!b && fingerprint(snapshot())
 function watchCloud(){if(channel){client.removeChannel(channel);channel=null}if(!user)return;channel=client.channel('planner-updates-'+user.id).on('postgres_changes',{event:'*',schema:'public',table:'planner_data',filter:'user_id=eq.'+user.id},()=>{if(!document.hidden)window.cloudCheck()}).subscribe()}
 function valid(v){return v&&Array.isArray(v.habits)&&Array.isArray(v.events)&&Array.isArray(v.tasks)&&Array.isArray(v.subjects)&&Array.isArray(v.lists)}
 async function remote(){const {data,error}=await client.from('planner_data').select('data,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
-function useRemote(r){if(!valid(r.data))throw Error('Cloud data is not a valid planner backup.');db={...initial(),...r.data};db.workoutPlan=Array.isArray(db.workoutPlan)&&db.workoutPlan.length===7?db.workoutPlan:starterWorkoutPlan();db.workoutLogs=Array.isArray(db.workoutLogs)?db.workoutLogs:[];db.weeklyMeals=db.weeklyMeals||{};db.journal=db.journal||{};db.saintNotes=db.saintNotes||[];db.prepChecks=db.prepChecks||{};db.money=db.money||{plan:{income:0,fixed:0,limit:0,goal:0},expenses:[]};localStorage.setItem(KEY,JSON.stringify(db));revision=r.updated_at;enabled=true;dirty=false;remember(r.data,revision);render();renderMoney();setStatus('Synced ✓')}
+function useRemote(r){
+  if(!valid(r.data))throw Error('Cloud data is not a valid planner backup.');
+  db=normalized({...initial(),...r.data});
+  localStorage.setItem(KEY,JSON.stringify(db));
+  revision=r.updated_at;enabled=true;dirty=false;
+  render();renderMoney();
+  remember(snapshot(),revision);
+  setStatus('Synced ✓');
+}
 async function chooseSession(u){
   user=u;enabled=false;dirty=false;revision=null;ui();watchCloud();
   if(!u){setStatus('Local only · sign in to sync');return}
@@ -80,10 +102,10 @@ async function chooseSession(u){
     const r=await remote(), local=snapshot(), base=baseline();
     if(!r){setStatus('Cloud is empty · upload to begin');document.getElementById('cloudAdvice').textContent='Export a backup, then upload this device once to start automatic sync.';return}
     if(!valid(r.data))throw Error('Cloud data is not a valid planner backup');
-    const cloud=fingerprint(r.data), current=fingerprint(local);
-    if(current===cloud){revision=r.updated_at;enabled=true;remember(r.data,revision);setStatus('Automatic sync active ✓');return}
-    if(base && current===base.data){useRemote(r);setStatus('Updated from cloud · automatic sync active ✓');return}
-    if(base && cloud===base.data){revision=r.updated_at;enabled=true;dirty=true;setStatus('Saving local changes…');await save();return}
+    const cloud=fingerprint(normalized(r.data)), current=fingerprint(normalized(local));
+    if(current===cloud){revision=r.updated_at;enabled=true;remember(snapshot(),revision);setStatus('Automatic sync active ✓');return}
+    if(base && current===fingerprint(normalized(JSON.parse(base.data)))){useRemote(r);setStatus('Updated from cloud · automatic sync active ✓');return}
+    if(base && cloud===fingerprint(normalized(JSON.parse(base.data)))){revision=r.updated_at;enabled=true;dirty=true;setStatus('Saving local changes…');await save();return}
     setStatus('Different local and cloud data · choose Load or Upload after backup');
     document.getElementById('cloudAdvice').textContent='Both copies contain different data. Export a backup, then choose which copy to keep. Automatic sync will start afterward.';
   }catch(e){setStatus('Cloud unavailable: '+e.message)}
@@ -100,12 +122,12 @@ window.cloudCheck=async()=>{
   try{
     const r=await remote();if(!r)return setStatus('No cloud planner yet.');
     if(!valid(r.data))throw Error('Cloud planner is invalid');
-    const local=fingerprint(snapshot()), cloud=fingerprint(r.data), base=baseline();
-    if(local===cloud){revision=r.updated_at;enabled=true;dirty=false;remember(r.data,revision);setStatus('Up to date ✓');return}
+    const local=fingerprint(normalized(snapshot())), cloud=fingerprint(normalized(r.data)), base=baseline();
+    if(local===cloud){revision=r.updated_at;enabled=true;dirty=false;remember(snapshot(),revision);setStatus('Up to date ✓');return}
     // A device with no unsynced edits can always accept a newer cloud revision.
-    if(base && local===base.data){useRemote(r);setStatus('Automatically updated from cloud ✓');return}
+    if(base && local===fingerprint(normalized(JSON.parse(base.data)))){useRemote(r);setStatus('Automatically updated from cloud ✓');return}
     // Local-only edits and an unchanged cloud revision: safely push the local edits.
-    if(base && cloud===base.data){revision=r.updated_at;enabled=true;dirty=true;setStatus('Saving local edits…');setTimeout(()=>save(),0);return}
+    if(base && cloud===fingerprint(normalized(JSON.parse(base.data)))){revision=r.updated_at;enabled=true;dirty=true;setStatus('Saving local edits…');setTimeout(()=>save(),0);return}
     // Neither side matches the last shared copy: do not discard either edit.
     enabled=false;dirty=false;setStatus('Sync conflict · both devices changed data. Back up before choosing Load or Upload.');
   }catch(e){setStatus('Cloud check failed: '+e.message)}finally{checking=false}
