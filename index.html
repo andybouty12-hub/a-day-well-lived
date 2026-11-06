@@ -21,7 +21,7 @@
 <div class="card span12"><div class="row between"><h2>Spending history</h2><select class="field" id="moneyMonth" onchange="renderMoney()"></select></div><div id="moneyHistory"></div><p class="small">Your records stay in this browser and are included in the website's JSON backup.</p></div></div></section><section id="journal" class="section"><div class="hero"><h1>My quiet pages 📖</h1><p>A private place to think, process, celebrate and begin again.</p></div><div class="grid"><div class="card span8"><div class="formrow"><label>Journal date <input type="date" class="field" id="journalDate" onchange="loadJournal()"></label><label>How I feel <select class="field" id="journalMood"><option>🌞 Hopeful</option><option>🌿 Calm</option><option>🌧️ Heavy</option><option>🌊 Overwhelmed</option><option>🌷 Grateful</option><option>😴 Tired</option></select></label></div><h3>What is on my heart today?</h3><textarea class="field" id="journalBody" rows="9" placeholder="Write freely. You don't have to make it sound beautiful."></textarea><h3>Three little things I am grateful for</h3><textarea class="field" id="journalGratitude" rows="3" placeholder="Small things count..."></textarea><h3>What did I learn, and what will I carry into tomorrow?</h3><textarea class="field" id="journalLesson" rows="3"></textarea><div class="row"><button class="btn" onclick="saveJournal()">Save journal entry</button><button class="btn alt" onclick="deleteJournal()">Delete this entry</button></div><p class="small">Entries are saved locally on this device. Export backups in Settings; this is not password-protected.</p></div><div class="card span4 tint-lav"><h2>Recent pages</h2><div id="journalHistory"></div></div></div></section>
 <section id="lists" class="section"><div class="hero"><h1>Everything in its place 📝</h1><p>Capture errands, ideas, books, purchases, and whatever else is on your mind.</p></div><div class="grid"><div class="card span6"><h2>Create a list</h2><div class="formrow"><input id="newListName" class="field" placeholder="e.g. Books to read"><button class="btn" onclick="addCustomList()">Create</button></div><div class="small">Lists stay until you delete them. Their items can be checked off anytime.</div></div><div id="customLists" style="display:contents"></div></div></section>
 <section id="insights" class="section"><div class="hero"><h1>Progress, not perfection 🌷</h1><p>Look at what you're building, not just what remains undone.</p></div><div class="grid"><div class="card span6"><h2>Last 14 days</h2><div id="historyChart"></div></div><div class="card span6 tint-lav"><h2>Study this week</h2><div id="weeklyStudy"></div></div><div class="card span12"><h2>Evening reflection</h2><p class="muted">What went well today? What could be a little easier tomorrow?</p><textarea class="field" id="reflection" placeholder="Today I'm grateful for... One small victory was..."></textarea><button class="btn" onclick="saveReflection()">Save today's reflection</button></div></div></section>
-<section id="settings" class="section"><div class="hero"><h1>Make it yours ⚙️</h1><p>Your personal space, your pace.</p></div><div class="grid"><div class="card span6"><h2>Reminders</h2><p>Choose a daily reminder time. Browser notifications can appear while this page is open, if permission is granted. Reliable background phone notifications require hosting the site and adding a push service.</p><div class="formrow"><input type="time" class="field" id="reminderTime" value="08:00"><button class="btn" onclick="saveReminder()">Save time</button><button class="btn alt" onclick="notifyPermission()">Allow notifications</button></div><p class="small" id="notificationStatus"></p></div><div class="card span6"><h2>Keep your data safe</h2><p>Your entries are stored in this browser on this device. Export a backup regularly; you can restore it later.</p><div class="row"><button class="btn" onclick="exportData()">Export backup</button><label class="btn alt" style="cursor:pointer">Import backup<input type="file" accept="application/json" onchange="importData(event)" hidden></label></div><p class="small">Clearing browser data or using a different device won't preserve your entries unless you restore a backup.</p></div><div class="card span12"><h2>Starting timetable</h2><p>This dashboard includes an editable starting university timetable. You can delete or modify events in the schedule section. Your personal habits and subjects are also editable.</p><button class="btn warn" onclick="resetAll()">Reset all data (confirmation required)</button></div></div></section>
+<section id="settings" class="section"><div class="hero"><h1>Make it yours ⚙️</h1><p>Your personal space, your pace.</p></div><div class="grid"><div class="card span6"><h2>Reminders</h2><p>Enable background push notifications for tasks, classes, appointments, and daily habits. Sign in to cloud sync on each device before enabling. Reminders use data saved in Supabase.</p><div class="row"><button class="btn" onclick="enablePlannerPush()">🔔 Enable background push</button><button class="btn alt" onclick="disablePlannerPush()">Disable on this device</button></div><p class="small" id="pushStatus" role="status" aria-live="polite"></p><p class="small">Optional in-app reminder (works only while the app is open):</p><div class="formrow"><input type="time" class="field" id="reminderTime" value="08:00"><button class="btn" onclick="saveReminder()">Save time</button><button class="btn alt" onclick="notifyPermission()">Allow notifications</button></div><p class="small" id="notificationStatus"></p></div><div class="card span6"><h2>Keep your data safe</h2><p>Your entries are stored in this browser on this device. Export a backup regularly; you can restore it later.</p><div class="row"><button class="btn" onclick="exportData()">Export backup</button><label class="btn alt" style="cursor:pointer">Import backup<input type="file" accept="application/json" onchange="importData(event)" hidden></label></div><p class="small">Clearing browser data or using a different device won't preserve your entries unless you restore a backup.</p></div><div class="card span12"><h2>Starting timetable</h2><p>This dashboard includes an editable starting university timetable. You can delete or modify events in the schedule section. Your personal habits and subjects are also editable.</p><button class="btn warn" onclick="resetAll()">Reset all data (confirmation required)</button></div></div></section>
 <div id="cloudPanel"><div class="row between"><b>☁️ Private cloud sync</b><span id="cloudStatus" role="status" aria-live="polite">Connecting…</span></div>
 <div id="cloudGuest"><p class="small">Sign in to sync your personal planner across devices. Your current local data stays on this device until you choose to upload it.</p><input class="field" id="cloudEmail" type="email" autocomplete="email" placeholder="Email address"><input class="field" id="cloudPassword" type="password" autocomplete="current-password" placeholder="Password (minimum 6 characters)"><div><button class="btn" onclick="cloudLogin()">Sign in</button><button class="btn alt" onclick="cloudSignup()">Create account</button><button class="btn alt" onclick="cloudResetPassword()">Reset password</button></div></div>
 <div id="cloudSigned" hidden><p class="small" id="cloudAccount"></p><p class="small" id="cloudAdvice">Before the first sync, export a JSON backup. Choose carefully which version to keep.</p><button class="btn" onclick="cloudUpload()">Upload this device's data</button><button class="btn alt" onclick="cloudDownload()">Load cloud data</button><button class="btn alt" onclick="cloudCheck()">Check for changes</button><button class="btn alt" onclick="cloudLogout()">Sign out</button></div></div><div class="footer">✿ A Day Well Lived · One meaningful day at a time · Local-first personal planner</div></main><script>
@@ -58,7 +58,7 @@ document.getElementById('moneyDate').value=now();moneyInit();renderMoney();
 (()=>{
 const URL='https://oxuhizfccpnhjisbkesw.supabase.co';
 const PUBLISHABLE_KEY='sb_publishable_LAlX6i1QDioZOdZwnVAp0w_SNob702I';
-const client=window.supabase?.createClient(URL,PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const client=window.supabase?.createClient(URL,PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});window.plannerPushClient=client;
 const status=document.getElementById('cloudStatus'),guest=document.getElementById('cloudGuest'),signed=document.getElementById('cloudSigned');
 let user=null,enabled=false,revision=null,dirty=false,timer=null,busy=false,checking=false,channel=null;
 const baselineKey=()=> 'dayWellLived.syncBaseline.'+user?.id;
@@ -178,5 +178,45 @@ async function installPlannerApp(){
  alert('On iPhone: open this website in Safari, tap Share, then Add to Home Screen. On Android: open the browser menu and choose Install app or Add to Home screen.');
 }
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('Offline installation unavailable:',err)))}
+// Background push subscription registration. Only the public VAPID key belongs in client code.
+const PLANNER_VAPID_PUBLIC_KEY='BPEcDbhuk-8F4uO0BRfs6y_Z6W-DL35UMoXdgFanOfsL5fzEps1QlAJ25gwEHyM6oyQXgrT9e2zcZ7VO54mgckk';
+const plannerPushStatus=message=>{const node=document.getElementById('pushStatus');if(node)node.textContent=message};
+function plannerVapidBytes(key){const b64=key.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-key.length%4)%4);return Uint8Array.from(atob(b64),ch=>ch.charCodeAt(0))}
+async function enablePlannerPush(){
+ try{
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))throw Error('Web Push is unavailable in this browser.');
+  const client=window.plannerPushClient;if(!client)throw Error('Cloud service is unavailable.');
+  const {data:{user},error:authError}=await client.auth.getUser();if(authError||!user)throw Error('Sign in to cloud sync first.');
+  const permission=await Notification.requestPermission();if(permission!=='granted')throw Error('Notification permission was not granted.');
+  const registration=await navigator.serviceWorker.ready;
+  let subscription=await registration.pushManager.getSubscription();
+  const key=plannerVapidBytes(PLANNER_VAPID_PUBLIC_KEY);
+  if(subscription&&subscription.options?.applicationServerKey){
+   const existing=new Uint8Array(subscription.options.applicationServerKey);
+   if(existing.length!==key.length||existing.some((v,i)=>v!==key[i])){await subscription.unsubscribe();subscription=null}
+  }
+  if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+  const json=subscription.toJSON();
+  if(!json.endpoint||!json.keys?.p256dh||!json.keys?.auth)throw Error('Incomplete browser push subscription.');
+  const {error}=await client.from('push_subscriptions').upsert({user_id:user.id,endpoint:json.endpoint,p256dh:json.keys.p256dh,auth:json.keys.auth,enabled:true},{onConflict:'endpoint'});
+  if(error)throw error;
+  plannerPushStatus('Background push enabled on this device ✓');
+ }catch(error){plannerPushStatus('Push setup failed: '+error.message)}
+}
+async function disablePlannerPush(){
+ try{
+  if(!('serviceWorker' in navigator))throw Error('Service workers unavailable.');
+  const registration=await navigator.serviceWorker.ready;
+  const subscription=await registration.pushManager.getSubscription();
+  const client=window.plannerPushClient;
+  if(subscription&&client){
+   const {data:{user}}=await client.auth.getUser();
+   if(user){const {error}=await client.from('push_subscriptions').delete().eq('user_id',user.id).eq('endpoint',subscription.endpoint);if(error)throw error}
+  }
+  if(subscription)await subscription.unsubscribe();
+  plannerPushStatus('Background push disabled on this device.');
+ }catch(error){plannerPushStatus('Could not disable push: '+error.message)}
+}
+
 </script>
 </body></html>
